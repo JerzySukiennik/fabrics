@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#ECE7DF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="description" content="Fabrics: a textile playground. Pull curtains, fly flags, drape robes, scrunch rugs. Cut, burn, dye and blow on real-time cloth.">
+<title>Fabrics</title>
+<!-- Fabrics: a real-time textile playground by Gzowo Labs. three.js + hand-written XPBD cloth, no build step. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 6c6 3 16-3 22 0v20c-6-3-16 3-22 0z' fill='%231D1A17'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}</script>
+<style>
+  :root {
+    --paper: #ECE7DF; --card: #FAF8F4; --ink: #1D1A17; --ink2: #5B544C; --muted: #978E84;
+    --line: rgba(29, 26, 23, .1); --err: #C2372E;
+    --shadow: 0 10px 30px rgba(45, 33, 22, .12), 0 1px 3px rgba(45, 33, 22, .1);
+    --spring: cubic-bezier(.2, .9, .25, 1.05);
+    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); color: var(--ink); font-family: var(--ui); -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: none; }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+  #gl, #fx { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #fx { pointer-events: none; }
+  .ui { position: fixed; z-index: 5; }
+
+  .top { top: calc(var(--safe-t) + 14px); left: 16px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; pointer-events: none; }
+  .top > * { pointer-events: auto; }
+  .brand h1 { margin: 0; font: italic 400 34px/1 var(--serif); letter-spacing: -.01em; }
+  .brand p { margin: 4px 0 0 2px; font-size: 12px; color: var(--ink2); letter-spacing: .01em; transition: opacity .3s; }
+  .acts { display: flex; gap: 6px; }
+  .ib { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(250, 248, 244, .82); box-shadow: var(--shadow); transition: transform .25s var(--spring), background .2s; }
+  .ib:active { transform: scale(.9); }
+  .ib svg, .tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .ib.on { background: var(--ink); color: var(--card); }
+  .ib .lvl { position: absolute; inset: auto 9px 7px; height: 2px; border-radius: 2px; background: currentColor; transform-origin: left; transform: scaleX(0); }
+
+  .bottom { left: 0; right: 0; bottom: calc(var(--safe-b) + 12px); display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+  .bottom > * { pointer-events: auto; }
+  .dock { display: flex; gap: 2px; padding: 5px; border-radius: 26px; background: rgba(250, 248, 244, .9); box-shadow: var(--shadow); position: relative; }
+  .tool { width: 50px; height: 50px; border-radius: 21px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--ink2); position: relative; z-index: 1; transition: color .25s, transform .25s var(--spring); }
+  .tool span { font-size: 9.5px; font-weight: 500; letter-spacing: .02em; }
+  .tool:active { transform: scale(.9); }
+  .tool.on { color: var(--card); }
+  .puck { position: absolute; top: 5px; left: 5px; width: 50px; height: 50px; border-radius: 21px; background: var(--ink); transition: transform .45s var(--spring); }
+  .row { display: flex; align-items: center; gap: 8px; width: min(760px, 100%); padding: 0 16px; }
+  .scenes { flex: 1; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 4px 2px; mask-image: linear-gradient(90deg, #000 85%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); touch-action: pan-x; }
+  .scenes::-webkit-scrollbar { display: none; }
+  .chip { flex: none; height: 34px; padding: 0 14px; border-radius: 17px; font-size: 13.5px; font-weight: 500; color: var(--ink2); background: rgba(250, 248, 244, .6); transition: background .25s, color .25s, transform .25s var(--spring); }
+  .chip:active { transform: scale(.94); }
+  .chip.on { background: var(--ink); color: var(--card); }
+  .fab { flex: none; height: 44px; padding: 0 14px 0 6px; border-radius: 22px; display: flex; align-items: center; gap: 8px; background: var(--card); box-shadow: var(--shadow); font-size: 13.5px; font-weight: 600; transition: transform .25s var(--spring); }
+  .fab:active { transform: scale(.94); }
+  .fab canvas { width: 32px; height: 32px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line); }
+
+  .ctx { position: fixed; z-index: 5; left: 50%; bottom: calc(var(--safe-b) + 128px); transform: translate(-50%, 8px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 22px; background: rgba(250, 248, 244, .92); box-shadow: var(--shadow); transition: opacity .25s, transform .35s var(--spring); white-space: nowrap; max-width: calc(100vw - 24px); }
+  .ctx.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .ctx .pill { height: 32px; padding: 0 12px; border-radius: 16px; font-size: 12.5px; font-weight: 500; background: rgba(29, 26, 23, .06); transition: transform .2s var(--spring); }
+  .ctx .pill:active { transform: scale(.93); }
+  .ctx .dot { width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); transition: transform .25s var(--spring); }
+  .ctx .dot.on { transform: scale(1.18); box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--ink); }
+  .ctx .sep { width: 1px; height: 20px; background: var(--line); margin: 0 2px; }
+
+  .hint { position: fixed; z-index: 4; left: 50%; top: calc(var(--safe-t) + 74px); transform: translate(-50%, -6px); opacity: 0; font-size: 13px; color: var(--ink2); background: rgba(250, 248, 244, .75); padding: 7px 13px; border-radius: 15px; transition: opacity .4s, transform .5s var(--spring); pointer-events: none; text-align: center; max-width: calc(100vw - 32px); }
+  .hint.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .scrim { position: fixed; inset: 0; z-index: 8; background: rgba(29, 26, 23, .08); opacity: 0; pointer-events: none; transition: opacity .3s; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .sheet { position: fixed; z-index: 9; left: 0; right: 0; bottom: 0; max-height: 78vh; overflow-y: auto; background: var(--card); border-radius: 26px 26px 0 0; padding: 10px 18px calc(var(--safe-b) + 22px); box-shadow: 0 -10px 40px rgba(45, 33, 22, .15); transform: translateY(105%); transition: transform .5s var(--spring); touch-action: pan-y; overscroll-behavior: contain; }
+  .sheet.show { transform: none; }
+  .sheet .handle { width: 38px; height: 5px; border-radius: 3px; background: rgba(29, 26, 23, .16); margin: 0 auto 6px; }
+  .sheet header { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 0 8px; }
+  .sheet h2 { margin: 0; font: italic 400 28px/1.1 var(--serif); }
+  .sheet .x { font-size: 13px; color: var(--ink2); padding: 6px 2px; }
+  .sheet h3 { margin: 18px 0 9px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  @media (min-width: 720px) {
+    .sheet { left: auto; right: 16px; top: calc(var(--safe-t) + 66px); bottom: auto; width: 392px; border-radius: 26px; max-height: calc(100vh - 210px); transform: translateY(24px) scale(.97); opacity: 0; pointer-events: none; transition: transform .45s var(--spring), opacity .25s; box-shadow: var(--shadow), 0 30px 60px rgba(45, 33, 22, .12); }
+    .sheet.show { transform: none; opacity: 1; pointer-events: auto; }
+    .sheet .handle { display: none; }
+    .scrim { display: none; }
+  }
+
+  .mats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mat { text-align: left; padding: 9px; border-radius: 16px; background: rgba(29, 26, 23, .04); transition: background .25s, transform .25s var(--spring), box-shadow .25s; }
+  .mat:active { transform: scale(.96); }
+  .mat.on { background: var(--card); box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .mat b { display: block; font-size: 13.5px; font-weight: 600; margin-top: 7px; }
+  .mat small { display: block; font-size: 11px; color: var(--ink2); margin-top: 2px; line-height: 1.25; }
+  .sw { position: relative; width: 100%; aspect-ratio: 1.6; border-radius: 10px; overflow: hidden; background: #ddd; }
+  .sw canvas { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .sw::after { content: ""; position: absolute; inset: 0; }
+  .sw.silk::after { background: linear-gradient(115deg, transparent 25%, rgba(255, 255, 255, .45) 45%, transparent 60%, rgba(0, 0, 0, .18) 85%); }
+  .sw.chiffon { background: repeating-conic-gradient(#d9d3c9 0 25%, #f3efe8 0 50%) 0 0 / 12px 12px; }
+  .sw.chiffon canvas { opacity: .5; }
+  .sw.chiffon::after { background: linear-gradient(180deg, rgba(255, 255, 255, .2), transparent); }
+  .sw.linen::after { background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .06) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(255, 255, 255, .06) 0 1px, transparent 1px 3px); }
+  .sw.velvet::after { background: radial-gradient(120% 90% at 40% 30%, rgba(255, 255, 255, .22), transparent 50%, rgba(0, 0, 0, .35)); }
+  .sw.denim::after { background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .12) 0 1.5px, transparent 1.5px 4px); }
+  .sw.wool::after { background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .14) 0 1.2px, transparent 1.6px) 0 0 / 5px 6px, linear-gradient(rgba(0, 0, 0, .06), rgba(0, 0, 0, .12)); }
+
+  .pats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .pat { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10.5px; color: var(--ink2); }
+  .pat canvas { width: 100%; aspect-ratio: 1; border-radius: 12px; transition: transform .25s var(--spring), box-shadow .25s; box-shadow: inset 0 0 0 1px var(--line); }
+  .pat:active canvas { transform: scale(.94); }
+  .pat.on canvas { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--ink); }
+  .pat.on { color: var(--ink); font-weight: 600; }
+  .cols { display: flex; flex-wrap: wrap; gap: 9px; }
+  .col { width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1); transition: transform .25s var(--spring), box-shadow .25s; position: relative; overflow: hidden; }
+  .col.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--ink); }
+  .col input { position: absolute; inset: -6px; width: 46px; height: 46px; opacity: 0; cursor: pointer; }
+  .col.custom { background: conic-gradient(#c2433a, #e2b92e, #8c9b7c, #29666b, #283863, #b23a78, #c2433a); }
+
+  .set { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+  .set:last-of-type { border-bottom: 0; }
+  .set small { display: block; font-size: 11.5px; color: var(--ink2); margin-top: 2px; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 150px; height: 28px; background: transparent; touch-action: pan-x; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(29, 26, 23, .12); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(29, 26, 23, .12); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -9px; border-radius: 50%; background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .25), inset 0 0 0 1px var(--line); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+  .seg { display: flex; padding: 3px; border-radius: 12px; background: rgba(29, 26, 23, .06); }
+  .seg button { height: 30px; padding: 0 10px; border-radius: 9px; font-size: 12.5px; font-weight: 500; color: var(--ink2); transition: background .25s, color .25s; }
+  .seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+  .tg { width: 50px; height: 30px; border-radius: 15px; background: rgba(29, 26, 23, .14); position: relative; flex: none; transition: background .3s; }
+  .tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .2); transition: transform .4s var(--spring); }
+  .tg.on { background: var(--ink); }
+  .tg.on::after { transform: translateX(20px); }
+  .credits { margin: 22px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+  .credits a { color: inherit; }
+
+  .toast { position: fixed; z-index: 12; left: 50%; top: calc(var(--safe-t) + 74px); transform: translate(-50%, -10px); opacity: 0; padding: 9px 15px; border-radius: 16px; background: var(--ink); color: var(--card); font-size: 13px; transition: opacity .3s, transform .45s var(--spring); pointer-events: none; max-width: calc(100vw - 32px); text-align: center; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { background: var(--err); }
+
+  .veil { position: fixed; inset: 0; z-index: 3; background: var(--paper); opacity: 0; pointer-events: none; transition: opacity .28s; }
+  .veil.on { opacity: 1; }
+  #boot { position: fixed; inset: 0; z-index: 20; background: var(--paper); display: grid; place-items: center; transition: opacity .7s; }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  #boot div { text-align: center; }
+  #boot h1 { margin: 0; font: italic 400 64px/1 var(--serif); }
+  #boot svg { width: 220px; height: 40px; margin-top: 6px; }
+  #boot path { fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 6 6; animation: sew 1.2s linear infinite; }
+  #boot p { margin: 10px 0 0; font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  #boot.err p { color: var(--err); }
+  @keyframes sew { to { stroke-dashoffset: -24; } }
+
+  @media (max-width: 420px) {
+    .tool { width: 44px; height: 48px; }
+    .puck { width: 44px; height: 48px; }
+    .brand h1 { font-size: 30px; }
+    .ib { width: 38px; height: 38px; }
+    .acts { gap: 5px; }
+    .mats { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  }
+  @media (max-width: 350px) { .tool span { display: none; } .tool { width: 40px; } .puck { width: 40px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: .01s !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="fx"></canvas>
+<div class="veil" id="veil"></div>
+
+<header class="ui top">
+  <div class="brand"><h1>Fabrics</h1><p id="sub">&nbsp;</p></div>
+  <div class="acts">
+    <button class="ib" id="bSound" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path class="w1" d="M15.5 8.5a5 5 0 0 1 0 7"/><path class="w2" d="M18.6 5.4a9.5 9.5 0 0 1 0 13.2"/><path class="mx" d="M16 9.5l5 5M21 9.5l-5 5" style="display:none"/></svg></button>
+    <button class="ib" id="bShot" aria-label="Snapshot"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.2"/></svg></button>
+    <button class="ib" id="bSet" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+    <button class="ib" id="bReset" aria-label="Reset"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+  </div>
+</header>
+
+<div class="hint" id="hint"></div>
+<div class="ctx" id="ctx"></div>
+
+<div class="ui bottom">
+  <nav class="dock" id="tools">
+    <i class="puck" id="puck"></i>
+    <button class="tool on" data-tool="grab" aria-label="Grab"><svg viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span>Grab</span></button>
+    <button class="tool" data-tool="pin" aria-label="Pin"><svg viewBox="0 0 24 24"><circle cx="16" cy="7.5" r="3.4"/><path d="M13.6 9.9 4 19.5"/><path d="M14.6 6.2l1.2-1.2"/></svg><span>Pin</span></button>
+    <button class="tool" data-tool="cut" aria-label="Cut"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg><span>Cut</span></button>
+    <button class="tool" data-tool="burn" aria-label="Burn"><svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span>Burn</span></button>
+    <button class="tool" data-tool="dye" aria-label="Dye"><svg viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg><span>Dye</span></button>
+    <button class="tool" data-tool="wind" aria-label="Wind"><svg viewBox="0 0 24 24"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg><span>Wind</span></button>
+    <button class="tool" data-tool="yarn" aria-label="Yarn"><svg viewBox="0 0 24 24"><circle cx="11" cy="12" r="8"/><path d="M5.2 6.6c4.5.6 9 4.6 10.3 12.6"/><path d="M3.4 10.6c4.6-.2 8.6 3 9.6 9.3"/><path d="M8.6 4.4c3.6 2 7.4 6 8.4 11.4"/><path d="M17.6 17.2c1.4 1.6 2.8 2.4 4.4 2.4"/></svg><span>Yarn</span></button>
+  </nav>
+  <div class="row">
+    <div class="scenes" id="scenes"></div>
+    <button class="fab" id="bFabric"><canvas id="fabThumb" width="64" height="64"></canvas><span id="fabName">Fabric</span></button>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<section class="sheet" id="sheetFabric" aria-label="Fabric">
+  <div class="handle"></div>
+  <header><h2>Fabric</h2><button class="x" data-close>Done</button></header>
+  <h3>Material</h3>
+  <div class="mats" id="mats"></div>
+  <h3>Print</h3>
+  <div class="pats" id="pats"></div>
+  <h3>Colour</h3>
+  <div class="cols" id="cols"></div>
+  <div class="set" style="margin-top:12px"><div>Print scale</div><input type="range" id="scale" min="0.5" max="2.2" step="0.05" value="1"></div>
+</section>
+
+<section class="sheet" id="sheetSet" aria-label="Settings">
+  <div class="handle"></div>
+  <header><h2>Studio</h2><button class="x" data-close>Done</button></header>
+  <h3>World</h3>
+  <div class="set"><div>Breeze<small>Wind through the studio</small></div><input type="range" id="breeze" min="0" max="1" step="0.01"></div>
+  <div class="set"><div>Gravity</div><div class="seg" id="gravity"><button data-g="0">Zero</button><button data-g="1.62">Moon</button><button data-g="9.81" class="on">Earth</button><button data-g="24.8">Jupiter</button></div></div>
+  <div class="set"><div>Slow motion<small>Quarter speed</small></div><button class="tg" id="tSlow" aria-label="Slow motion"></button></div>
+  <h3>Senses</h3>
+  <div class="set" id="rowTilt"><div>Tilt to pour gravity<small>Gravity follows your phone</small></div><button class="tg" id="tTilt" aria-label="Tilt"></button></div>
+  <div class="set"><div>Blow into the mic<small>Your breath becomes wind</small></div><button class="tg" id="tBlow" aria-label="Blow"></button></div>
+  <h3>View</h3>
+  <div class="set"><div>Thread tension<small>See the weave, stretched threads glow</small></div><button class="tg" id="tThreads" aria-label="Threads"></button></div>
+  <p class="credits">Cloth simulated live in your browser, every thread. Sounds are CC0 recordings from <a href="https://freesound.org" target="_blank" rel="noopener">freesound.org</a>. Made in Gzowo, <a href="https://gzowo.fun" target="_blank" rel="noopener">Gzowo Labs</a>.</p>
+</section>
+
+<div class="toast" id="toast"></div>
+<div id="boot"><div><h1>Fabrics</h1><svg viewBox="0 0 220 40"><path d="M4 28c30-22 50 10 80-6s42-18 64-4 40 10 68-8"/></svg><p id="bootMsg">Weaving</p></div></div>
+<script type="module" src="src/main.js"></script>
+<script>setTimeout(function () { var b = document.getElementById('boot'); if (b && !b.classList.contains('gone') && !window.__fabrics) { b.classList.add('err'); document.getElementById('bootMsg').textContent = 'This browser could not start the loom. Try a recent Safari or Chrome.'; } }, 15000);</script>
+</body>
+</html>
